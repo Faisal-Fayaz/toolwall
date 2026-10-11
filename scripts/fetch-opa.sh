@@ -9,7 +9,12 @@ VERSION="${OPA_VERSION:-v1.21.1}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="$ROOT/bin/opa"
 
-OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+# Git Bash and MSYS report MINGW*/MSYS*/CYGWIN*, not "windows", and the
+# release asset is a .exe rather than the *_static naming.
+case "$(uname -s)" in
+	MINGW* | MSYS* | CYGWIN*) OS="windows" ;;
+	*) OS="$(uname -s | tr '[:upper:]' '[:lower:]')" ;;
+esac
 case "$(uname -m)" in
 	x86_64 | amd64) ARCH="amd64" ;;
 	arm64 | aarch64) ARCH="arm64" ;;
@@ -18,7 +23,12 @@ esac
 
 # The static linux build is the one known to include WebAssembly support;
 # the v1.10.0 static build reported "WebAssembly: unavailable".
-NAME="opa_${OS}_${ARCH}_static"
+# Windows has no _static variant.
+if [ "$OS" = "windows" ]; then
+	NAME="opa_windows_${ARCH}.exe"
+else
+	NAME="opa_${OS}_${ARCH}_static"
+fi
 
 if [ -x "$DEST" ] && "$DEST" version 2>/dev/null | grep -q "Version: ${VERSION#v}"; then
 	echo "opa $VERSION already present"

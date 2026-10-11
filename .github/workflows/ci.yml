@@ -41,6 +41,7 @@ jobs:
       # The OPA CLI compiles Rego to wasm. It is checksum-verified and never
       # shipped in the package — it is a build-time dependency only.
       - name: fetch OPA
+        shell: bash
         run: npm run fetch:opa
 
       - name: typecheck
