@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Faisal-Fayaz/toolwall/actions/workflows/ci.yml/badge.svg)](https://github.com/Faisal-Fayaz/toolwall/actions/workflows/ci.yml)
 
-[![npm](https://img.shields.io/npm/v/@faisalfayaz/toolwall.svg)](https://www.npmjs.com/package/@faisalfayaz/toolwall)
+[![npm](https://img.shields.io/npm/v/toolguard.svg)](https://www.npmjs.com/package/toolguard)
 
 A policy firewall for AI agent tool calls. Sits between an agent and its MCP
 servers, gates every call against a policy, and lets you tune that policy against
@@ -71,7 +71,7 @@ These are upstream bugs, not things toolwall can work around:
 ## Install
 
 ```bash
-npm install @faisalfayaz/toolwall
+npm install toolguard
 ```
 
 That's the whole thing. The policy ships precompiled (~128 kB), so there is no
@@ -443,26 +443,22 @@ prepublish checks
   ok    tarball size 151kB
 ```
 
-The package is published as **`@faisalfayaz/toolwall`**. The unscoped name `toolwall`
-was already taken on npm, and a name is the one thing you cannot take back — a
-scoped name under your own namespace keeps the project's name and can never be
-squatted. The CLI is still just `toolwall`.
+The npm package is **`toolguard`**; the CLI is still just `toolwall`.
+
+The name `toolwall` was already taken on npm by an unrelated active package,
+and an npm name is the one thing you cannot take back — so the distribution name
+and the project name differ. Everything else lines up: `github.com/Faisal-Fayaz/toolwall`.
 
 Before releasing:
 
-1. **Push the repo.** `repository.url` currently points at
-   `github.com/Faisal-Fayaz/toolwall` — correct it in `package.json` if that is not
-   where you will host it. The prepublish check fails on a placeholder.
-2. **`npm login`**, or set `NODE_AUTH_TOKEN`. Then:
+```bash
+npm run prepublish:check   # must exit 0
+npm publish
+```
 
-   ```bash
-   npm run prepublish:check   # must exit 0
-   npm publish
-   ```
-
-   Or create a GitHub release and let `.github/workflows/release.yml` publish
-   with provenance after re-verifying everything.
-   `npm run dry-run:release` packs without publishing.
+Or create a GitHub release and let `.github/workflows/release.yml` publish with
+provenance after re-verifying everything. `npm run dry-run:release` packs
+without publishing.
 
 `docs/M0.md` records the spike that de-risked the Rego/Wasm path, including the
 Rego v1 and Wasm-runtime gotchas that shaped the implementation.
