@@ -125,22 +125,29 @@ console.log("grants");
 
 // grants must not be silently written into a repo
 {
-	check("grants live outside the project by default", grantsPath().includes("/.toolwall/"), true);
+	// separator-agnostic: this assertion must hold on Windows too
+	check("grants live outside the project by default", /[\\/]\.toolwall[\\/]/.test(grantsPath()), true);
 	check("default grants path is user-global", grantsPath().startsWith(homedir()), true);
 }
 
 // a grant scoped to a directory must not cover a sibling with a shared prefix
 {
+	const base = resolve(workdir, "proj");
 	const scoped = new GrantStore(join(workdir, "g6.json"));
-	scoped.add("shell-needs-human", "/home/u/proj", 60);
+	scoped.add("shell-needs-human", base, 60);
 	check(
-		"grant for /home/u/proj does not cover /home/u/project-leaked",
-		applyGrants(askDecision, call({ agent: { id: "t", cwd: "/home/u/project-leaked" } }), scoped).effect,
+		"grant does not cover a sibling with a shared prefix",
+		applyGrants(askDecision, call({ agent: { id: "t", cwd: `${base}-leaked` } }), scoped).effect,
 		"ask",
 	);
 	check(
-		"grant for /home/u/proj does cover /home/u/proj/sub",
-		applyGrants(askDecision, call({ agent: { id: "t", cwd: "/home/u/proj/sub" } }), scoped).effect,
+		"grant does cover a subdirectory",
+		applyGrants(askDecision, call({ agent: { id: "t", cwd: join(base, "sub") } }), scoped).effect,
+		"allow",
+	);
+	check(
+		"grant matches with a trailing separator on the call cwd",
+		applyGrants(askDecision, call({ agent: { id: "t", cwd: `${join(base, "sub")}/` } }), scoped).effect,
 		"allow",
 	);
 }

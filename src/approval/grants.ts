@@ -16,7 +16,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep as pathSep } from "node:path";
 
 import type { CallInput, Decision } from "../types.js";
 
@@ -80,7 +80,7 @@ export class GrantStore {
 		const now = new Date();
 		const grant: Grant = {
 			rule,
-			scope: scope === "*" ? "*" : resolve(scope),
+			scope: scope === "*" ? "*" : normalisePath(scope),
 			grantedAt: now.toISOString(),
 			expiresAt: new Date(now.getTime() + minutes * 60_000).toISOString(),
 			...extra,
@@ -103,7 +103,7 @@ export class GrantStore {
 
 	remove(rule: string, scope?: string): number {
 		const before = this.read().length;
-		const target = scope && scope !== "*" ? resolve(scope) : undefined;
+		const target = scope && scope !== "*" ? normalisePath(scope) : undefined;
 		this.write(
 			this.read().filter((g) => !(g.rule === rule && (target === undefined || g.scope === target))),
 		);
@@ -132,7 +132,12 @@ export class GrantStore {
 		if (g.fingerprint && g.fingerprint !== callFingerprint(rule, call)) return false;
 
 		if (g.scope === "*") return true;
-		const cwd = call.agent?.cwd ?? "";
+		// Normalise both sides before comparing. A scope is stored resolved,
+		// but the call's cwd arrives raw from the host — different separators,
+		// trailing slashes, or casing would otherwise silently fail to match,
+		// and a grant that quietly stops applying is worse than one that is
+		// obviously broken.
+		const cwd = normalisePath(call.agent?.cwd ?? "");
 		if (!cwd) return false;
 		// Prefix match on a PATH BOUNDARY, so a grant for /home/u/proj
 		// does not cover /home/u/project-leaked. A plain startswith is the
@@ -170,7 +175,30 @@ function sameGrantKey(a: Grant, b: Grant): boolean {
 }
 
 /** Path-boundary aware prefix helper. */
-const scopePrefix = (scope: string): string => (scope.endsWith("/") ? scope : `${scope}/`);
+/**
+ * Path-boundary prefix, separator-aware.
+ *
+ * The previous version appended "/" unconditionally, so a Windows scope never
+ * matched: `C:\proj` vs `C:\proj\sub` failed the prefix test. Windows is
+ * case-insensitive too, so comparisons lower-case on win32.
+ */
+const SEP_RE = /[\\/]+$/;
+export function scopePrefix(scope: string): string {
+	return SEP_RE.test(scope) ? scope : `${scope}${pathSep}`;
+}
+
+/** Normalise separators and casing for comparison; resolve if possible. */
+export function normalisePath(p: string): string {
+	if (!p) return "";
+	let out = p.replace(/\\/g, "/");
+	try {
+		out = resolve(out).replace(/\\/g, "/");
+	} catch {
+		// keep the literal form if resolution is impossible
+	}
+	out = out.replace(/\/+$/, "");
+	return process.platform === "win32" ? out.toLowerCase() : out;
+}
 
 /**
  * Identity of a single call: rule + tool + arguments + cwd. Matches the
