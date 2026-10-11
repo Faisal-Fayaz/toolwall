@@ -1,5 +1,5 @@
 {
-  "name": "toolguard",
+  "name": "gatewall",
   "version": "0.1.0",
   "type": "module",
   "description": "Policy firewall for AI agent tool calls: argument-level gating, replayable policy, and credential brokering for MCP servers and agent hooks",

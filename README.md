@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Faisal-Fayaz/toolwall/actions/workflows/ci.yml/badge.svg)](https://github.com/Faisal-Fayaz/toolwall/actions/workflows/ci.yml)
 
-[![npm](https://img.shields.io/npm/v/toolguard.svg)](https://www.npmjs.com/package/toolguard)
+[![npm](https://img.shields.io/npm/v/gatewall.svg)](https://www.npmjs.com/package/gatewall)
 
 A policy firewall for AI agent tool calls. Sits between an agent and its MCP
 servers, gates every call against a policy, and lets you tune that policy against
@@ -71,7 +71,7 @@ These are upstream bugs, not things toolwall can work around:
 ## Install
 
 ```bash
-npm install toolguard
+npm install gatewall
 ```
 
 That's the whole thing. The policy ships precompiled (~128 kB), so there is no
@@ -443,11 +443,15 @@ prepublish checks
   ok    tarball size 151kB
 ```
 
-The npm package is **`toolguard`**; the CLI is still just `toolwall`.
+The npm package is **`gatewall`**; the CLI is still just `toolwall`, and the repo
+is `github.com/Faisal-Fayaz/toolwall`.
 
-The name `toolwall` was already taken on npm by an unrelated active package,
-and an npm name is the one thing you cannot take back — so the distribution name
-and the project name differ. Everything else lines up: `github.com/Faisal-Fayaz/toolwall`.
+The distribution name differs from the project name because `toolwall` is held
+on npm by an unrelated package, and npm additionally rejects names *similar* to
+existing ones — `toolguard`, `toolwall-cli`, `agentfirewall`, `toolgate` and
+`callguard` were all refused for being near neighbours of packages that already
+exist. A name is the one thing on npm you cannot take back, so it is worth the
+extra letters.
 
 Before releasing:
 
