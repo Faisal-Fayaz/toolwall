@@ -9,7 +9,7 @@
  * Run: node --experimental-strip-types test/packaging.test.ts
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +28,8 @@ const sh = (cmd: string, args: string[], cwd: string) =>
 	execFileSync(cmd, args, { encoding: "utf8", cwd, stdio: ["ignore", "pipe", "pipe"] });
 
 const workdir = mkdtempSync(join(tmpdir(), "toolwall-pkg-"));
+const proj = join(workdir, "proj");
+mkdirSync(proj, { recursive: true });
 
 try {
 	// ---------------------------------------------------------------- pack
@@ -57,9 +59,25 @@ try {
 	const installedPkg = JSON.parse(readFileSync(join(pkg, "package.json"), "utf8"));
 	check("bin is declared", typeof installedPkg.bin?.toolwall === "string", true);
 
+	// npm SILENTLY drops a bin entry whose target is not executable, publishing
+	// a package with no working CLI. Run the installed binary the way a user
+	// would, so this cannot regress unnoticed.
+	const binLink = join(workdir, "node_modules/.bin/toolwall");
+	check("npm created a .bin shim", existsSync(binLink), true);
+	const binTarget = installedPkg.bin?.toolwall as string;
+	const binMode = statSync(join(pkg, binTarget)).mode & 0o777;
+	check("bin target is executable", (binMode & 0o111) !== 0, true);
+	const viaBin = sh(binLink, ["check", "--cwd", proj], workdir);
+	check("installed binary runs", viaBin.includes("workspace-scoped"), true);
+	// usage text goes to stderr, so capture both streams
+	const viaNode = execFileSync("node", [join(pkg, binTarget), "--help"], {
+		encoding: "utf8",
+		cwd: workdir,
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+	check("installed binary runs directly too", viaNode.includes("toolwall serve"), true);
+
 	// ------------------------------------------- runs with no OPA present
-	const proj = join(workdir, "proj");
-	sh("mkdir", ["-p", proj], workdir);
 
 	const hook = (payload: object): string => {
 		try {

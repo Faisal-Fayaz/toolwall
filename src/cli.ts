@@ -678,8 +678,11 @@ async function main() {
 			return cmdGrant(flags);
 		case "ungrant":
 			return cmdUngrant(flags);
-		default:
-			process.stderr.write(
+		default: {
+			// An explicitly requested --help goes to stdout (the caller asked
+			// for it and may be piping it); usage on an error goes to stderr.
+			const out = flags.help || flags.h ? process.stdout : process.stderr;
+			out.write(
 				"usage:\n" +
 					"  toolwall serve  -- <command> [args…]   run the MCP proxy in enforce mode\n" +
 					"                    [--upstream-env A,B|all]  env vars to forward upstream\n" +
@@ -698,7 +701,10 @@ async function main() {
 					"  toolwall ungrant <rule>                remove that grant\n" +
 					"  toolwall hook                          (internal) Claude Code hook entrypoint\n",
 			);
+			// An explicit --help is a success; a bare invocation is a usage error.
+			if (flags.help || flags.h) process.exit(0);
 			process.exit(cmd ? 2 : 1);
+		}
 	}
 }
 

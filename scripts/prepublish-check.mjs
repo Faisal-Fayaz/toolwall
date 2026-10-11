@@ -8,7 +8,7 @@
  * needs a human decision fails loudly instead of guessing.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,6 +55,35 @@ try {
 	fail(`the name "${pkg.name}" is ALREADY TAKEN on npm (latest ${view}) — pick another before publishing`);
 } catch {
 	ok(`name "${pkg.name}" appears available on npm`);
+}
+
+// --- the CLI must actually ship ------------------------------------------
+// npm SILENTLY removes a bin entry whose target is not executable, publishing a
+// package with no working CLI and no hard error. Verified here by checking the
+// mode directly, and by confirming npm does not rewrite package.json.
+try {
+	const binEntries = typeof pkg.bin === "string" ? { toolwall: pkg.bin } : (pkg.bin ?? {});
+	const bins = Object.entries(binEntries);
+	if (bins.length === 0) {
+		fail("package.json declares no bin — the CLI would not be installable");
+	}
+	for (const [name, target] of bins) {
+		const p = resolve(ROOT, target);
+		if (!existsSync(p)) {
+			fail(`bin "${name}" points at a missing file: ${target}`);
+			continue;
+		}
+		const mode = statSync(p).mode & 0o777;
+		if (!(mode & 0o111)) {
+			fail(`bin "${name}" (${target}) is mode ${mode.toString(8)}, not executable — npm will silently drop it`);
+		} else if (!readFileSync(p, "utf8").startsWith("#!")) {
+			fail(`bin "${name}" has no shebang, so it cannot be executed directly`);
+		} else {
+			ok(`bin "${name}" executable with shebang`);
+		}
+	}
+} catch (err) {
+	fail(`could not verify bin: ${err instanceof Error ? err.message : String(err)}`);
 }
 
 // --- artifacts ------------------------------------------------------------

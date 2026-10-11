@@ -1,5 +1,5 @@
 {
-  "name": "@faisal/toolwall",
+  "name": "@faisalfayaz/toolwall",
   "version": "0.1.0",
   "type": "module",
   "description": "Policy firewall for AI agent tool calls: argument-level gating, replayable policy, and credential brokering for MCP servers and agent hooks",
@@ -10,7 +10,7 @@
     "fetch:opa": "bash scripts/fetch-opa.sh",
     "build:policy": "bash scripts/build-policy.sh policy/default.rego firewall/decision",
     "build:policy:m0": "BASE_POLICY= OUT_DIR=.build/m0 bash scripts/build-policy.sh test/fixtures/spike.rego firewall/decision",
-    "build": "npm run build:policy && tsc -p tsconfig.json",
+    "build": "npm run build:policy && tsc -p tsconfig.json && node scripts/mark-bin-executable.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:engine": "node --experimental-strip-types test/engine.test.ts",
     "test:hooks": "node --experimental-strip-types test/hooks.test.ts",
@@ -86,15 +86,16 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/faisal/toolwall.git"
+    "url": "git+https://github.com/Faisal-Fayaz/toolwall.git"
   },
   "publishConfig": {
     "access": "public"
   },
   "displayName": "toolwall",
-  "homepage": "https://github.com/faisal/toolwall#readme",
+  "homepage": "https://github.com/Faisal-Fayaz/toolwall#readme",
   "bugs": {
-    "url": "https://github.com/faisal/toolwall/issues"
+    "url": "https://github.com/Faisal-Fayaz/toolwall/issues"
   },
-  "author": "faisal"
+  "author": "Faisal Fayaz <fai504438@gmail.com>",
+  "contributors": []
 }

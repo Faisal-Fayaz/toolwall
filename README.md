@@ -1,6 +1,6 @@
 # toolwall
 
-[![npm](https://img.shields.io/npm/v/@faisal/toolwall.svg)](https://www.npmjs.com/package/@faisal/toolwall)
+[![npm](https://img.shields.io/npm/v/@faisalfayaz/toolwall.svg)](https://www.npmjs.com/package/@faisalfayaz/toolwall)
 
 A policy firewall for AI agent tool calls. Sits between an agent and its MCP
 servers, gates every call against a policy, and lets you tune that policy against
@@ -69,7 +69,7 @@ These are upstream bugs, not things toolwall can work around:
 ## Install
 
 ```bash
-npm install @faisal/toolwall
+npm install @faisalfayaz/toolwall
 ```
 
 That's the whole thing. The policy ships precompiled (~128 kB), so there is no
@@ -441,7 +441,7 @@ prepublish checks
   ok    tarball size 151kB
 ```
 
-The package is published as **`@faisal/toolwall`**. The unscoped name `toolwall`
+The package is published as **`@faisalfayaz/toolwall`**. The unscoped name `toolwall`
 was already taken on npm, and a name is the one thing you cannot take back — a
 scoped name under your own namespace keeps the project's name and can never be
 squatted. The CLI is still just `toolwall`.
@@ -449,7 +449,7 @@ squatted. The CLI is still just `toolwall`.
 Before releasing:
 
 1. **Push the repo.** `repository.url` currently points at
-   `github.com/faisal/toolwall` — correct it in `package.json` if that is not
+   `github.com/Faisal-Fayaz/toolwall` — correct it in `package.json` if that is not
    where you will host it. The prepublish check fails on a placeholder.
 2. **`npm login`**, or set `NODE_AUTH_TOKEN`. Then:
 
