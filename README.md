@@ -1,5 +1,7 @@
 # toolwall
 
+[![CI](https://github.com/Faisal-Fayaz/toolwall/actions/workflows/ci.yml/badge.svg)](https://github.com/Faisal-Fayaz/toolwall/actions/workflows/ci.yml)
+
 [![npm](https://img.shields.io/npm/v/@faisalfayaz/toolwall.svg)](https://www.npmjs.com/package/@faisalfayaz/toolwall)
 
 A policy firewall for AI agent tool calls. Sits between an agent and its MCP
