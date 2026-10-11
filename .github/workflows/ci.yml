@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22 is the declared floor; 24 is what this was developed against.
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      # The OPA CLI compiles Rego to wasm. It is checksum-verified and never
+      # shipped in the package — it is a build-time dependency only.
+      - name: fetch OPA
+        run: npm run fetch:opa
+
+      - name: typecheck
+        run: npm run typecheck
+
+      # Guards the invariant that a broken .rego must never replace a policy
+      # that was working.
+      - name: build policy
+        run: npm run build:release
+
+      - name: test
+        run: npm run test:all
+
+      - name: verify the tarball installs and runs standalone
+        run: npm run test:packaging
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run fetch:opa
+      - run: npm run build:release
+      - run: npm run test:coverage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  linux-musl:
+    name: linux (self-hosted smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run fetch:opa
+      - run: npm run build:release
+      # Nothing here should need a writable HOME beyond the default.
+      - name: smoke test the installed CLI
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          npm pack --pack-destination "$tmp" >/dev/null
+          cd "$tmp"
+          npm init -y >/dev/null
+          npm install ./toolwall-*.tgz --no-audit --no-fund
+          node node_modules/toolwall/dist/cli.js check --cwd .

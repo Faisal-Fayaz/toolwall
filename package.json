@@ -1,0 +1,100 @@
+{
+  "name": "@faisal/toolwall",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Policy firewall for AI agent tool calls: argument-level gating, replayable policy, and credential brokering for MCP servers and agent hooks",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "fetch:opa": "bash scripts/fetch-opa.sh",
+    "build:policy": "bash scripts/build-policy.sh policy/default.rego firewall/decision",
+    "build:policy:m0": "BASE_POLICY= OUT_DIR=.build/m0 bash scripts/build-policy.sh test/fixtures/spike.rego firewall/decision",
+    "build": "npm run build:policy && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:engine": "node --experimental-strip-types test/engine.test.ts",
+    "test:hooks": "node --experimental-strip-types test/hooks.test.ts",
+    "test:hook:e2e": "node --experimental-strip-types test/hook-e2e.test.ts",
+    "test:integration": "node --experimental-strip-types test/integration.test.ts",
+    "test:m0": "npm run build:policy:m0 && node --experimental-strip-types test/m0-spike.ts",
+    "test:m0:t4": "node test/m0-t4-stdio.mjs",
+    "test": "npm run test:engine && npm run test:hooks && npm run test:multi-agent && npm run test:secrets && npm run test:exfiltration && npm run test:approval && npm run test:replay && npm run test:packaging && npm run test:hook:e2e && npm run test:integration",
+    "test:all": "npm run test:m0 && npm run test:m0:t4 && npm run test",
+    "test:approval": "node --experimental-strip-types test/approval.test.ts",
+    "test:replay": "node --experimental-strip-types test/replay.test.ts",
+    "build:release": "npm run build && node -e \"const fs=require('fs');fs.copyFileSync('.build/policy.wasm','policy/default.wasm');console.error('staged policy/default.wasm ('+(fs.statSync('policy/default.wasm').size/1024|0)+'KB)')\"",
+    "prepack": "npm run build:release",
+    "test:packaging": "node --experimental-strip-types test/packaging.test.ts",
+    "test:multi-agent": "node --experimental-strip-types test/multi-agent.test.ts",
+    "test:secrets": "node --experimental-strip-types test/secrets.test.ts",
+    "test:exfiltration": "node --experimental-strip-types test/exfiltration.test.ts",
+    "test:coverage": "c8 --reporter=text --reporter=html --reporter=lcov --src dist --exclude 'dist/**/*.d.ts' --exclude 'dist/types.js' npm test",
+    "coverage:open": "node -e \"console.log('file://'+process.cwd()+'/coverage/index.html')\"",
+    "prepublishOnly": "node scripts/prepublish-check.mjs",
+    "prepublish:check": "node scripts/prepublish-check.mjs",
+    "dry-run:release": "npm run build:release && npm pack && echo 'packed, nothing published'"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@open-policy-agent/opa-wasm": "1.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "c8": "^12.0.0",
+    "typescript": "^5.9.0"
+  },
+  "license": "MIT",
+  "keywords": [
+    "ai",
+    "agent",
+    "mcp",
+    "policy",
+    "security",
+    "regal",
+    "opa",
+    "guardrails",
+    "claude-code"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "toolwall": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./engine": {
+      "types": "./dist/engine/engine.d.ts",
+      "import": "./dist/engine/engine.js"
+    },
+    "./policy/default.wasm": "./policy/default.wasm",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.js.map",
+    "policy/default.wasm",
+    "policy/default.rego",
+    "policy/capabilities.json",
+    "scripts/build-policy.sh",
+    "scripts/fetch-opa.sh",
+    "docs/M0.md",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/faisal/toolwall.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "displayName": "toolwall",
+  "homepage": "https://github.com/faisal/toolwall#readme",
+  "bugs": {
+    "url": "https://github.com/faisal/toolwall/issues"
+  },
+  "author": "faisal"
+}

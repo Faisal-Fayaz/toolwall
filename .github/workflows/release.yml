@@ -1,0 +1,99 @@
+name: Release
+
+# Publishing is deliberately NOT wired to a branch push. Cutting a release runs
+# npm publish, which is irreversible — you can un-publish a version but you
+# cannot un-take a name, and a squatted name is never released.
+#
+# To cut one: create the GitHub release (tag + notes). This workflow then
+# verifies everything again before publishing.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "verify everything but do not publish"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write # npm provenance
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run fetch:opa
+      - run: npm run typecheck
+      - run: npm run test:all
+
+      # The tag and package.json must agree, or the published artifact carries
+      # a version nobody can match to its source.
+      - name: tag matches package version
+        if: github.event_name == 'release'
+        run: |
+          set -euo pipefail
+          pkg="$(node -p "require('./package.json').version")"
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$pkg" != "$tag" ]; then
+            echo "tag '$tag' does not match package.json version '$pkg'" >&2
+            exit 1
+          fi
+
+      - name: package contents are what we expect
+        run: |
+          set -euo pipefail
+          npm run build:release
+          # The vendored OPA binary must never ship: 62MB, and it defeats the
+          # whole point of a precompiled policy.
+          if npm pack --dry-run --json | grep -q 'bin/opa'; then
+            echo "bin/opa must not be in the tarball" >&2
+            exit 1
+          fi
+          npm pack --dry-run 2>&1 | tail -5
+
+  publish:
+    name: publish
+    needs: verify
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - run: npm ci
+      - run: npm run fetch:opa
+
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  dry-run:
+    name: dry run
+    needs: verify
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.dry-run
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run fetch:opa
+      - run: npm run build:release
+      - run: npm pack
+      - run: echo "packed $(ls *.tgz) — nothing was published"

@@ -1,0 +1,25 @@
+node_modules/
+dist/
+
+# compiled policy output — regenerate with scripts/build-policy.sh
+.build/
+
+# vendored OPA binary (62MB); fetch with scripts/fetch-opa.sh
+bin/opa
+
+# decision logs can contain secrets; never commit
+*.jsonl
+logs/
+.firewall-decisions/
+
+.DS_Store
+*.tsbuildinfo
+# npm pack output
+*.tgz
+
+# coverage
+coverage/
+.nyc_output/
+
+# local toolwall state (decision logs, approval queues, catalogues)
+.toolwall/
