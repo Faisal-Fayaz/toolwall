@@ -53,6 +53,29 @@ Only the latest release receives security fixes.
 | 0.1.x | ✅ |
 | < 0.1.0 | ❌ |
 
+## Accepted risk: sprintf-js (GHSA-hp3w-g68c-fv3c)
+
+Dependabot reports a medium advisory for `sprintf-js`, pulled in transitively by
+`@open-policy-agent/opa-wasm`. It is **the latest published version and there is
+no patch** (checked against the advisory).
+
+It is a denial of service via unbounded precision specifiers in `sprintf`. It is
+not reachable from agent input here:
+
+- Format strings live in the `.rego` policy, which the operator writes and
+  which is compiled to WebAssembly ahead of time. Agent-controlled data arrives
+  as `input` and is never used as a format string.
+- Reaching it requires an attacker who can already write your policy file, and
+  someone who can write your policy file already has code execution.
+
+So the exposure is limited to a self-inflicted DoS by a policy author, which is
+below the bar for a vulnerability report. It is recorded here rather than
+silenced, because "Dependabot says so" is not the same as "it affects you" and
+the distinction should be visible.
+
+If OPA ever ships a runtime without this dependency, or a patched
+`sprintf-js` appears, this entry should be revisited.
+
 ## Reporting a vulnerability
 
 **Please do not open a public issue for a security report.**
