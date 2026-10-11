@@ -12,13 +12,22 @@ concurrency:
 
 jobs:
   test:
-    name: test (node ${{ matrix.node }})
-    runs-on: ubuntu-latest
+    name: test (node ${{ matrix.node }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         # 22 is the declared floor; 24 is what this was developed against.
         node: [22, 24]
+        # pathIsWithin is symlink-, separator- and case-sensitive, and it has
+        # only ever run on Linux. Windows drive letters and macOS /private
+        # prefixes are exactly where it should be expected to break.
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          # keep the expensive packaging/interop legs on Linux only
+          - os: ubuntu-latest
+            node: 24
+            full: true
     steps:
       - uses: actions/checkout@v4
 
@@ -42,11 +51,40 @@ jobs:
       - name: build policy
         run: npm run build:release
 
-      - name: test
-        run: npm run test:all
+      # The pure-logic suites must pass everywhere: path containment, hooks,
+      # policy, secrets, logging. Cross-platform breakage shows up here.
+      - name: test (portable suites)
+        if: runner.os != 'Windows'
+        run: |
+          npm run test:engine
+          npm run test:hooks
+          npm run test:multi-agent
+          npm run test:base64
+          npm run test:log
+          npm run test:secrets
+          npm run test:approval
+          npm run test:replay
 
-      - name: verify the tarball installs and runs standalone
-        run: npm run test:packaging
+      # Windows needs the bash-based scripts, which run under Git Bash.
+      - name: test (windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          npm run test:engine
+          npm run test:hooks
+          npm run test:multi-agent
+          npm run test:secrets
+          npm run test:approval
+
+      - name: test (full, linux only)
+        if: matrix.full
+        run: |
+          npm run test:exfiltration
+          npm run test:interop
+          npm run test:http
+          npm run test:integration
+          npm run test:packaging
+          npm run test:hook:e2e
 
   coverage:
     name: coverage

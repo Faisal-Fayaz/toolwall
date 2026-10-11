@@ -13,14 +13,15 @@
  */
 
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
+import { statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { loadUserRules, policyPaths, userData } from "./config.js";
 
 // Approval, grants and secrets are imported lazily: `hook` runs on every tool
 // call and must not pay for CLI-only code.
-import { DecisionLog, readLog } from "./decision-log/log.js";
+import { DEFAULT_KEEP, DecisionLog, readRecent } from "./decision-log/log.js";
 
 // Adapters are imported LAZILY per command. Loading the MCP SDK costs ~150ms
 // and `hook` runs on every single tool call, so it must not pay for a proxy it
@@ -99,10 +100,7 @@ async function makeEngine(wasmPath: string, flags: Args["flags"] = {}): Promise<
 // ---------------------------------------------------------------------- serve
 
 async function cmdServe(positional: string[], flags: Args["flags"], mode: "enforce" | "dry-run") {
-	const upstreamCmd = positional[0];
-	if (!upstreamCmd) err("usage: toolwall serve -- <command> [args…]");
-
-	const { createProxy } = await import("./adapters/mcp-proxy/proxy.js");
+	const { Gate } = await import("./adapters/mcp-proxy/gate.js");
 	const { ApprovalQueue } = await import("./approval/queue.js");
 	const { GrantStore } = await import("./approval/grants.js");
 	const { SecretStore } = await import("./secrets/store.js");
@@ -111,28 +109,89 @@ async function cmdServe(positional: string[], flags: Args["flags"], mode: "enfor
 	const agentCwd = policyCwd(flags);
 	const secrets = new SecretStore();
 	const engine = await PolicyEngine.load(wasm, userData(loadUserRules(agentCwd).rules), undefined, secrets);
-	const log = new DecisionLog({ path: typeof flags.log === "string" ? flags.log : DEFAULT_LOG });
+	const log = new DecisionLog(logOptions(flags, typeof flags.log === "string" ? flags.log : DEFAULT_LOG));
 
-	process.stderr.write(`[toolwall] ${mode} via ${wasm}\n[toolwall] logging to ${log.path}\n`);
-
-	await createProxy({
+	const gate = new Gate({
 		engine,
 		log,
 		queue: new ApprovalQueue(`${agentCwd}/.toolwall/approvals.jsonl`),
 		grants: new GrantStore(),
 		secrets,
+		agent: { id: typeof flags.agent === "string" ? flags.agent : "unknown", cwd: agentCwd },
+		catalogueDir: agentCwd,
+		mode,
+		diagnostics: flags.verbose ? (m) => process.stderr.write(`[toolwall] ${m}\n`) : undefined,
+	});
+
+	const diag = flags.verbose ? (m: string) => process.stderr.write(`[toolwall] ${m}\n`) : () => {};
+	process.stderr.write(`[toolwall] ${mode} via ${wasm}\n[toolwall] logging to ${log.path}\n`);
+
+	// Remote upstream: toolwall listens locally and the agent points at us.
+	const url = typeof flags.url === "string" ? flags.url : undefined;
+	if (url) {
+		const { createHttpProxy } = await import("./adapters/mcp-proxy/http.js");
+		const handle = await createHttpProxy({
+			gate,
+			url,
+			useSse: flags.sse === true,
+			port: typeof flags.port === "string" ? Number(flags.port) : 0,
+			host: typeof flags.host === "string" ? flags.host : "127.0.0.1",
+			headers: parseHeaders(flags),
+			secrets,
+			diagnostics: diag,
+		});
+
+		process.stderr.write(
+			`\n  point your agent at:\n\n    ${handle.url}\n\n` +
+				`  upstream: ${url}\n`,
+		);
+		if ((flags.host as string) && flags.host !== "127.0.0.1" && flags.host !== "localhost") {
+			process.stderr.write(
+				`\n  WARNING: bound to ${flags.host}, which is reachable off-machine.\n` +
+					`  A policy proxy on a public interface lets any client invoke tools\n` +
+					`  through whatever policy is loaded. Loopback is the safe default.\n`,
+			);
+		}
+		process.on("SIGINT", () => {
+			void handle.close().finally(() => process.exit(0));
+		});
+		return;
+	}
+
+	const upstreamCmd = positional[0];
+	if (!upstreamCmd) {
+		err(
+			"usage: toolwall serve --url <https://host/mcp>   wrap a remote MCP server\n" +
+				"   or: toolwall serve -- <command> [args…]         wrap a local (stdio) MCP server",
+		);
+	}
+
+	const { createProxy } = await import("./adapters/mcp-proxy/proxy.js");
+	const handle = await createProxy({
+		gate,
 		upstream: { command: upstreamCmd, args: positional.slice(1) },
 		upstreamEnv: parseUpstreamEnv(flags),
-		agent: {
-			id: typeof flags.agent === "string" ? flags.agent : "unknown",
-			cwd: agentCwd,
-		},
-		mode,
+		diagnostics: diag,
 	});
 	// stdio server keeps the process alive
+	void handle;
 }
 
-// --------------------------------------------------------------------- replay
+/** `--header 'Name=Value'` may be repeated; values may reference secrets. */
+function parseHeaders(flags: Args["flags"]): Record<string, string> | undefined {
+	const out: Record<string, string> = {};
+	let any = false;
+	for (const [key, value] of Object.entries(flags)) {
+		if (key !== "header") continue;
+		any = true;
+		for (const line of String(value).split(/\n/)) {
+			const idx = line.indexOf("=");
+			if (idx <= 0) continue;
+			out[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+		}
+	}
+	return any ? out : undefined;
+}
 
 interface Delta {
 	record: number;
@@ -168,7 +227,11 @@ async function cmdReplay(flags: Args["flags"]) {
 	const wasm = typeof flags.policy === "string" ? flags.policy : DEFAULT_WASM;
 	const engine = await makeEngine(wasm, flags);
 
-	const records = await readLog(against);
+	// Read the rotation window newest-first rather than a single file, and
+	// stream it so a large log does not have to fit in memory.
+	const log = new DecisionLog({ path: against, maxBytes: 0 });
+	const limit = typeof flags.limit === "string" ? Number(flags.limit) : Number.POSITIVE_INFINITY;
+	const records = await readRecent(log, limit);
 	if (records.length === 0) err(`no records in ${against}`);
 
 	const useGrants = flags["no-grants"] !== true;
@@ -524,6 +587,40 @@ function parseUpstreamEnv(flags: Args["flags"]): Record<string, string> | "inher
 	return env;
 }
 
+/** Log bounds from flags; keeps a runaway session from filling the disk. */
+function logOptions(flags: Args["flags"], path: string) {
+	return {
+		path,
+		maxBytes: typeof flags["log-max-bytes"] === "string" ? Number(flags["log-max-bytes"]) : undefined,
+		keep: typeof flags["log-keep"] === "string" ? Number(flags["log-keep"]) : undefined,
+	};
+}
+
+// --------------------------------------------------------------------- logs
+
+/** Show which log files exist and how big they are — rotation is invisible otherwise. */
+async function cmdLogs(flags: Args["flags"]) {
+	const path = typeof flags.path === "string" ? flags.path : `${policyCwd(flags)}/.toolwall/decisions.jsonl`;
+	const log = new DecisionLog({ path, maxBytes: 0, keep: 0 });
+	const kb = (n: number) => `${(n / 1024).toFixed(1)}kB`;
+
+	process.stdout.write(`log dir: ${dirname(path)}\n\n`);
+	let total = 0;
+	for (const [i, file] of log.readOrder().entries()) {
+		const size = statSync(file).size;
+		total += size;
+		const label = i === 0 ? "live" : `rot .${i}`;
+		process.stdout.write(`  ${label.padEnd(7)} ${kb(size).padStart(9)}  ${basename(file)}\n`);
+	}
+	if (total === 0) {
+		process.stdout.write("  (no decision log yet — run the proxy or hooks first)\n");
+		return;
+	}
+	process.stdout.write(`\n  total ${kb(total)}\n`);
+	process.stdout.write(`\nRotation keeps the live file under --log-max-bytes (default 10MB)\n`);
+	process.stdout.write(`and ${DEFAULT_KEEP} generations. To inspect history: toolwall replay --against ${path}\n`);
+}
+
 // ------------------------------------------------------------------ approval
 
 function approvalsQueue(cwd: string) {
@@ -668,6 +765,8 @@ async function main() {
 			return cmdScrub(positional);
 		case "build-policy":
 			return cmdBuildPolicy(positional, flags);
+		case "logs":
+			return cmdLogs(flags);
 		case "pending":
 			return cmdPending(flags);
 		case "approve":
@@ -688,6 +787,8 @@ async function main() {
 					"                    [--upstream-env A,B|all]  env vars to forward upstream\n" +
 					"  toolwall shadow -- <command> [args…]   run the proxy without blocking\n" +
 					"  toolwall replay --against <log>        re-evaluate history vs a policy\n" +
+					"                    [--limit N]           only the N most recent records\n" +
+					"  toolwall logs [--path p]                show log files and their sizes\n" +
 					"  toolwall check                         show policy layering and smoke test\n" +
 					"  toolwall why <tool> --path <p>          explain one decision\n" +
 					"  toolwall install-hooks                 register Claude Code hooks\n" +

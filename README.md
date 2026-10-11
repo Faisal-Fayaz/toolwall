@@ -33,6 +33,28 @@ agent ──▶ toolwall ──▶ upstream MCP server
 Every adapter feeds **one policy engine**, so a single ruleset governs MCP calls
 and built-in calls alike.
 
+### Transports
+
+| Upstream | How |
+|---|---|
+| Local (stdio) | `toolwall serve -- <command>` — spawns and wraps it |
+| Remote (streamable HTTP) | `toolwall serve --url https://host/mcp` — toolwall listens locally |
+| Remote (legacy SSE) | `toolwall serve --url … --sse` |
+
+For a remote server, point the agent at the local endpoint toolwall prints:
+
+```bash
+$ toolwall serve --url https://mcp.example.com/mcp \
+    --header 'Authorization=Bearer {{secret:github_token}}'
+  point your agent at:
+
+    http://127.0.0.1:41234/mcp
+```
+
+toolwall binds **loopback by default**. Exposing it (`--host 0.0.0.0`) is allowed
+but warns: a policy proxy on a public interface lets any client invoke tools
+through whatever policy is loaded.
+
 ### Supported agents
 
 | Agent | Built-in tools | MCP tools |
@@ -371,6 +393,12 @@ anything first.
   `readOnlyHint`/`destructiveHint` (anthropics/claude-code#83886), so the proxy
   publishes what it learns at `tools/list` and the hook adapter reads it.
 
+## Security
+
+Scope, limitations and disclosure process: **[SECURITY.md](SECURITY.md)**.
+In short — toolwall gates what it can observe, but shell execution is not a
+sandbox and needs OS-level isolation.
+
 ## Not covered
 
 **Shell safety is not a security boundary.** `command_contains` is substring
@@ -383,10 +411,18 @@ provide one.
 
 Also worth knowing:
 
+- **Logs are bounded.** The decision log rotates at 10 MB by default
+  (`--log-max-bytes`, `--log-keep`), and `toolwall logs` shows what is on disk.
+  `toolwall replay --limit N` replays only the N most recent records.
+
 - **Substitution happens in the proxy only**, never in hooks. For built-in tools
   it would paste a live secret into a shell command line — the one place a
   secret is most likely to land in a process listing, history file, or error
   message. A `{{secret:…}}` in `Bash` is treated as an ordinary string.
+- **Base64 scrubbing cannot see pixels.** Payloads that decode as text are
+  scrubbed and re-encoded; genuinely binary payloads are byte-searched and
+  **dropped** when a credential is found. A credential rendered as pixels in a
+  screenshot is invisible — that is OCR, and we do not claim it.
 - **The upstream's environment is an allowlist.** The MCP SDK hands it almost
   nothing, which silently breaks servers needing API keys. Forward explicitly:
 
@@ -417,7 +453,7 @@ npm run test:all       # adds the M0 spike suites
 npm run test:coverage     # c8 report + HTML in coverage/
 ```
 
-**328 tests, ~91% statement coverage.** `cli.ts` reads lower because it is
+**435 tests across 14 suites, ~91% statement coverage.** `cli.ts` reads lower because it is
 exercised through spawned subprocesses, which c8 cannot instrument — the paths
 run, they are just not traced.
 

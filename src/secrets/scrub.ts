@@ -20,6 +20,7 @@
  * than silently receiving a truncated string.
  */
 
+import { handleBase64, BASE64_FIELDS } from "./base64.js";
 import type { SecretStore } from "./store.js";
 
 /**
@@ -54,6 +55,8 @@ export interface ScrubStats {
 	count: number;
 	names: string[]; // secret names (never values) that were hit
 	patterns: number;
+	/** Binary payloads dropped because they contained a secret. */
+	dropped?: number;
 }
 
 /**
@@ -108,6 +111,46 @@ export function scrubValue(value: unknown, secrets?: SecretStore, depth = 0): { 
 		for (const n of s.names) seen.add(n);
 	};
 
+	// A binary payload containing a secret is DROPPED, not rewritten — the
+	// bytes cannot be safely re-rendered. Recorded so the caller can say so.
+	let dropped = 0;
+	const dropMarker = "[redacted:toolwall dropped a binary payload containing a credential]";
+
+	// Only THIS object's own base64 fields. Nested objects (EmbeddedResource's
+	// `resource`) are handled by the recursive walk, so re-walking them here
+	// would double-count every drop.
+	const walkBase64 = (
+		walked: Record<string, unknown>,
+		raw: Record<string, unknown>,
+	): Record<string, unknown> => {
+		const out: Record<string, unknown> = { ...walked };
+		for (const [k, val] of Object.entries(raw)) {
+			if (BASE64_FIELDS.has(k) && typeof val === "string" && secrets) {
+				const verdict = handleBase64(
+					val,
+					{ values: secrets.scrubbable(), names: secrets.names() },
+					(text) => scrubString(text, secrets).text,
+				);
+				if (verdict.kind === "binary-dirty") {
+					dropped++;
+					merge({ count: 1, names: verdict.secretNames, patterns: 0 });
+					out[k] = "";
+					continue;
+				}
+				if (verdict.kind === "text") {
+					merge({ count: 1, names: [], patterns: 0 });
+					out[k] = verdict.value;
+					continue;
+				}
+				out[k] = verdict.kind === "not-base64" ? scrubString(val, secrets).text : val;
+				continue;
+			}
+			// leave everything else exactly as the ordinary walk produced it
+			out[k] = walked[k];
+		}
+		return out;
+	};
+
 	const walk = (v: unknown, d: number): unknown => {
 		if (d > 20) return "[deep]";
 		if (typeof v === "string") {
@@ -116,9 +159,10 @@ export function scrubValue(value: unknown, secrets?: SecretStore, depth = 0): { 
 			return r.text;
 		}
 		if (Array.isArray(v)) return v.map((x) => walk(x, d + 1));
-		if (v && typeof v === "object") {
+		if (v && typeof v === "object" && !Array.isArray(v)) {
+			const obj = v as Record<string, unknown>;
 			const out: Record<string, unknown> = {};
-			for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+			for (const [k, val] of Object.entries(obj)) {
 				if (SENSITIVE_KEY_RE.test(k) && typeof val === "string" && val.length >= 8) {
 					out[k] = "[redacted:field]";
 					merge({ count: 1, names: [], patterns: 0 });
@@ -126,13 +170,16 @@ export function scrubValue(value: unknown, secrets?: SecretStore, depth = 0): { 
 				}
 				out[k] = walk(val, d + 1);
 			}
-			return out;
+			// base64 payloads are handled after the ordinary walk so that the
+			// decision to drop a block is made on the original object
+			return secrets ? walkBase64(out, obj) : out;
 		}
 		return v;
 	};
 
 	const walked = walk(value, depth);
 	stats.names = [...seen];
+	if (dropped > 0) stats.dropped = dropped;
 	return { value: walked, stats };
 }
 
@@ -157,6 +204,7 @@ export function scrubToolResult<T extends Record<string, unknown>>(result: T, se
 		next[key] = r.value;
 		total.count += r.stats.count;
 		total.patterns += r.stats.patterns;
+		total.dropped = (total.dropped ?? 0) + (r.stats.dropped ?? 0);
 		for (const n of r.stats.names) seen.add(n);
 	}
 	total.names = [...seen];

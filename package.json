@@ -18,7 +18,7 @@
     "test:integration": "node --experimental-strip-types test/integration.test.ts",
     "test:m0": "npm run build:policy:m0 && node --experimental-strip-types test/m0-spike.ts",
     "test:m0:t4": "node test/m0-t4-stdio.mjs",
-    "test": "npm run test:engine && npm run test:hooks && npm run test:multi-agent && npm run test:secrets && npm run test:exfiltration && npm run test:approval && npm run test:replay && npm run test:packaging && npm run test:hook:e2e && npm run test:integration",
+    "test": "npm run test:engine && npm run test:hooks && npm run test:multi-agent && npm run test:base64 && npm run test:log && npm run test:secrets && npm run test:exfiltration && npm run test:approval && npm run test:replay && npm run test:interop && npm run test:packaging && npm run test:hook:e2e && npm run test:http && npm run test:integration",
     "test:all": "npm run test:m0 && npm run test:m0:t4 && npm run test",
     "test:approval": "node --experimental-strip-types test/approval.test.ts",
     "test:replay": "node --experimental-strip-types test/replay.test.ts",
@@ -32,13 +32,18 @@
     "coverage:open": "node -e \"console.log('file://'+process.cwd()+'/coverage/index.html')\"",
     "prepublishOnly": "node scripts/prepublish-check.mjs",
     "prepublish:check": "node scripts/prepublish-check.mjs",
-    "dry-run:release": "npm run build:release && npm pack && echo 'packed, nothing published'"
+    "dry-run:release": "npm run build:release && npm pack && echo 'packed, nothing published'",
+    "test:http": "node --experimental-strip-types test/http.test.ts",
+    "test:base64": "node --experimental-strip-types test/base64.test.ts",
+    "test:log": "node --experimental-strip-types test/log.test.ts",
+    "test:interop": "node --experimental-strip-types test/interop.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
     "@open-policy-agent/opa-wasm": "1.10.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/server-filesystem": "^1.0.0",
     "@types/node": "^24.0.0",
     "c8": "^12.0.0",
     "typescript": "^5.9.0"
