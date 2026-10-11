@@ -79,7 +79,9 @@ jobs:
       - run: npm ci
       - run: npm run fetch:opa
       - run: npm run build:release
-      # Nothing here should need a writable HOME beyond the default.
+      # Nothing here should need a writable HOME beyond the default. This is
+      # the only job that proves the published artifact works on a machine
+      # that has never seen this repository: no OPA binary, no source.
       - name: smoke test the installed CLI
         run: |
           set -euo pipefail
@@ -87,5 +89,10 @@ jobs:
           npm pack --pack-destination "$tmp" >/dev/null
           cd "$tmp"
           npm init -y >/dev/null
-          npm install ./toolwall-*.tgz --no-audit --no-fund
-          node node_modules/toolwall/dist/cli.js check --cwd .
+          # *.tgz, not toolwall-*.tgz: the filename carries the scope.
+          npm install ./*.tgz --no-audit --no-fund
+          pkg="$(node -p "require('./package.json').name")"
+          echo "installed $pkg"
+          # run the shim npm created — this is what users get
+          ./node_modules/.bin/toolwall --help | head -3
+          ./node_modules/.bin/toolwall check --cwd . | tail -2
