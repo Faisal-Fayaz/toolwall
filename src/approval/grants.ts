@@ -16,7 +16,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve, sep as pathSep } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import type { CallInput, Decision } from "../types.js";
 
@@ -183,8 +183,16 @@ function sameGrantKey(a: Grant, b: Grant): boolean {
  * case-insensitive too, so comparisons lower-case on win32.
  */
 const SEP_RE = /[\\/]+$/;
+
+/**
+ * Append the normalised separator, not the platform one.
+ *
+ * normalisePath rewrites everything to forward slashes, so the comparison
+ * space is entirely "/". Using path.sep here produced `C:/proj\` on Windows,
+ * which cannot match `C:/proj/sub`.
+ */
 export function scopePrefix(scope: string): string {
-	return SEP_RE.test(scope) ? scope : `${scope}${pathSep}`;
+	return SEP_RE.test(scope) ? scope : `${scope}/`;
 }
 
 /** Normalise separators and casing for comparison; resolve if possible. */
